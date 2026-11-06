@@ -7,13 +7,16 @@ Each generated token maps to one otherwise-unused Unicode codepoint.
 from __future__ import annotations
 
 import math
+import os
 import struct
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont, features
 
 
-DEFAULT_ARABIC_FONT = Path("/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf")
+DEFAULT_ARABIC_FONT = Path(
+    os.environ.get("KALEIDO_ARABIC_FONT", "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf")
+)
 PAGE_BYTES = 514
 DESC_BYTES = 24
 HEADER_BYTES = 32
@@ -258,4 +261,3 @@ def build_font(
     font = ImageFont.truetype(str(arabic_font_path), font_size, layout_engine=ImageFont.Layout.RAQM)
     glyphs = [(cp, render_word(token, font, spread, 4)) for cp, token in glyph_tokens]
     return append_glyphs(reference, glyphs)
-

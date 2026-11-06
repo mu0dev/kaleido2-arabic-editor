@@ -128,7 +128,7 @@ class TranslatorEngineTests(unittest.TestCase):
         with self.assertRaisesRegex(TranslationError, "flatten ruby tags"):
             prepare_runtime(base, "00007\t話者甲@rمرحبا@bعالم\n", font, font)
         with self.assertRaisesRegex(TranslationError, "font lacks"):
-            prepare_runtime(base, "00007\t話者甲@rمرحبا*\n", font, font)
+            prepare_runtime(base, "00007\t話者甲@rمرحبا💩\n", font, font)
 
     def test_allocator_uses_next_safe_bmp_range_when_pua_is_full(self) -> None:
         with patch.object(runtime, "CODEPOINT_RANGES", ((0xE000, 0xE000), (0xAC00, 0xAC01))):
