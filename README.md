@@ -1,34 +1,19 @@
-# Kaleidoscope II Arabic translation editor
+# Kaleidoscope II Arabic translation editor for Windows x64
 
-A local browser editor for building an Arabic patch for *Kaleidoscope of Phantom Prison II* (title ID `0100451020714000`). The editor stores translations in a separate project directory and builds a Suyu LayeredFS `patch.rom`. It does not translate the game automatically or include game files.
+A Windows x64 local browser editor for building an Arabic patch for *Kaleidoscope of Phantom Prison II* (title ID `0100451020714000`). The editor stores translations in a separate project directory and builds a Suyu LayeredFS `patch.rom`. It does not translate the game automatically or include game files.
 
-## Start the editor
+## Windows setup
 
-Clone this repository, install the dependencies below, then copy `config.example.json` to `config.local.json` and fill in paths to your own extracted game files and build tools. Start with `./run.sh` on Linux or `run.cmd` on Windows, then open the address it prints (`http://127.0.0.1:8778/` by default). Keep the project directory named in your local configuration: it holds saved edits and extracted image previews. `config.local.json`, game files, and generated patches are excluded from Git.
+1. Install [Python 3.12 for Windows](https://www.python.org/downloads/) with the **Python launcher** enabled, [RubyInstaller x64](https://rubyinstaller.org/downloads/) with `ruby.exe` on `PATH`, and the [Microsoft Visual C++ x64 runtime](https://learn.microsoft.com/en-us/cpp/windows/latest-supported-vc-redist). Install Suyu separately to run the patch. These are the only system programs the setup script cannot install for you.
+2. Download or clone this repository, then run **`setup.cmd`** from its folder. It creates `.venv`, installs the pinned Python packages, downloads the official Windows `sdu.exe` and `EnterExtractor.exe` releases, and downloads the two public patch compiler sources. Each tool or source archive is checked against a pinned SHA-256 hash. The Noto Sans Arabic font is already bundled under its [Open Font License](assets/OFL-NotoSansArabic.txt).
+3. `setup.cmd` creates `config.local.json`. Edit the three `C:/Kaleido2/game/...` entries to point to your own extracted **`data.rom`**, **`newrodin-medium.fnt`**, and **`system.fnt`**. Use forward slashes in JSON paths. The bundled tools, compiler sources, and font work with the supplied defaults. If Ruby is not on `PATH`, set `ruby_bin` to its full `ruby.exe` path.
+4. Run **`run.cmd`** and open the printed address (`http://127.0.0.1:8778/` by default). `run.cmd 8780` chooses another port. The server binds to your own computer only.
 
-## Set up
+`project_dir` defaults to `./project` beside the editor; keep this folder to preserve your translations and image edits. Relative paths in `config.local.json` are resolved from the config file's folder. `config.local.json`, downloaded tools/sources, game files, and generated patches are ignored by Git. You can replace the bundled font by setting an optional `arabic_font_path` in the config.
 
-Use your own extracted copy of the game. You need `data.rom`, `newrodin-medium.fnt`, and `system.fnt`, plus local checkouts of the [`kaleido2-patch`](https://gitlab.com/Neurochitin/kaleido2-patch) repository and the [`kaleido`](https://gitlab.com/Neurochitin/kaleido) repository on its `kaleido2-repack` branch. The patch checkout supplies `dialogue.txt` and `base/main.rb`. The game files and translated project stay outside this tool's source bundle.
+The default Suyu mod path is `%APPDATA%/suyu/load`. If you use a portable Suyu installation, right-click the game in Suyu and choose **Open Mod Data Location** to find the correct location, then set `suyu_load_dir` to its `load` folder. Close the game before installing a patch so the old file is not locked.
 
-Install Python 3.10+ with the packages in `requirements.txt`, a Noto Sans Arabic Regular TTF, Ruby compatible with the patch compiler, [`sdu`](https://github.com/AuroraWright/shin), and [`EnterExtractor`](https://github.com/DCNick3/EnterExtractor). `sdu` reads game archive entries; `EnterExtractor` converts image assets. Suyu is needed to run the result. Pillow uses libraqm for Arabic shaping where available; the included reshaping and bidirectional text packages provide a Windows fallback. Install the Python dependencies with `python3 -m pip install -r requirements.txt` on Linux, or use the Windows commands below.
-
-Copy `config.example.json` to `config.local.json`. Edit every path for your machine. `project_dir` should be a writable directory for translations, extracted previews, and builds. `suyu_load_dir` is Suyu's `load` directory; its location can vary with your install. `original_*` and `data_rom` point to your local source files. `arabic_font_path` points to the Noto Sans Arabic Regular TTF. `patch_source`, `kaleido_path`, `sdu_bin`, `enter_extractor_bin`, and `ruby_bin` point to tools or checkouts on your machine. If Ruby is in a custom runtime, optional `ruby_lib_dir` and `ruby_load_paths` can be set as well.
-
-### Linux
-
-Install the Python dependencies, copy and edit the configuration, then run `./run.sh`. The common Noto Sans Arabic path on Linux is `/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf`; set `arabic_font_path` to its actual location. To use another local port, run `./run.sh 8780`.
-
-### Windows
-
-Install Python 3.10+, Ruby, and Windows builds of `sdu` and `EnterExtractor`. In Command Prompt, from this repository's directory:
-
-```bat
-py -3 -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-copy config.example.json config.local.json
-```
-
-Edit `config.local.json` before running `run.cmd`: use absolute paths with forward slashes, such as `C:/Games/Kaleido/data.rom`, which are valid in JSON. Set `arabic_font_path` to your Noto Sans Arabic Regular TTF, `ruby_bin` to `ruby.exe`, `sdu_bin` and `enter_extractor_bin` to their Windows executables, and `suyu_load_dir` to the actual Suyu `load` directory on your installation. Point `patch_source` and `kaleido_path` to the required local checkouts. Then run `run.cmd`. Close the game before installing a patch so Suyu does not lock the old file. Run `run.cmd 8780` to choose another local port. The server binds to localhost by default.
+If **Extract all images** reports that it cannot find an ASCII-only temporary directory, create a writable folder such as `C:/KaleidoTemp` and set `KALEIDO_ASCII_TEMP_DIR` to that folder before starting `run.cmd`. The Windows EnterExtractor binary requires ASCII paths for its input and output arguments; the editor stages conversion files there when needed.
 
 ## Translate and build
 
@@ -44,7 +29,7 @@ Edits and image previews update immediately **in the browser**. The running game
 
 ## Development verification
 
-The Linux launcher served the local editor in the development environment. Twelve asset-free checks, including an HTTP startup test, passed on both Ubuntu and Windows in GitHub Actions. A separate Linux smoke project saved Arabic dialogue, a speaker name, a save title, and a modified PNG through the editor API; the build and Suyu installer completed. Suyu mounted that generated patch and reached the title menu. Earlier in-game checks also displayed Arabic dialogue and a speaker name. These checks establish a working editing and patch pipeline on the tested Linux setup. The Windows game build path has not been tested end to end with game assets on Windows. The full game still needs translator work and in-game review of each changed screen.
+The Windows GitHub Actions job checks the pinned setup downloads, Python startup, Arabic font generation, Unicode paths, and a synthetic patch build and install. A separate development smoke build using the real game assets produced a `ROM2` patch, and a Suyu check reached the title menu. A complete build and in-game review with those assets on Windows is still needed. Translators should inspect each edited screen in Suyu as they work.
 
 ## Limits to review in game
 

@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import os
 import re
-import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -77,43 +75,24 @@ class TranslationError(ValueError):
 
 
 def font_charset(font_path: Path) -> set[int]:
-    """Read Unicode coverage from a TrueType font on Linux or Windows."""
+    """Read Unicode coverage from the selected TrueType font."""
     if not font_path.is_file():
         raise TranslationError(f"Arabic font not found: {font_path}")
     try:
         from fontTools.ttLib import TTFont
-    except ImportError:
-        # Existing Linux installations may have fontconfig rather than the
-        # optional Python dependency. Windows users should install the pinned
-        # requirements; fc-query is not normally present there.
-        if os.name == "nt":
-            raise TranslationError("Install Python requirements: pip install -r requirements.txt")
-    else:
-        try:
-            font = TTFont(str(font_path), lazy=True)
-            try:
-                mapping = font.getBestCmap()
-            finally:
-                font.close()
-        except Exception as error:
-            raise TranslationError(f"Cannot inspect Arabic font {font_path}: {error}") from error
-        if not mapping:
-            raise TranslationError(f"Arabic font has no Unicode character map: {font_path}")
-        return set(mapping)
+    except ImportError as error:
+        raise TranslationError("Install Python requirements: pip install -r requirements.txt") from error
     try:
-        specification = subprocess.check_output(
-            ["fc-query", "--format", "%{charset}", str(font_path)], text=True
-        )
-    except (OSError, subprocess.CalledProcessError) as error:
+        font = TTFont(str(font_path), lazy=True)
+        try:
+            mapping = font.getBestCmap()
+        finally:
+            font.close()
+    except Exception as error:
         raise TranslationError(f"Cannot inspect Arabic font {font_path}: {error}") from error
-    supported: set[int] = set()
-    for part in specification.split():
-        if "-" in part:
-            start, stop = part.split("-", 1)
-            supported.update(range(int(start, 16), int(stop, 16) + 1))
-        else:
-            supported.add(int(part, 16))
-    return supported
+    if not mapping:
+        raise TranslationError(f"Arabic font has no Unicode character map: {font_path}")
+    return set(mapping)
 
 
 @dataclass

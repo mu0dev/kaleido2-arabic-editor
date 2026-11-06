@@ -38,6 +38,14 @@ LINE = re.compile(r"^(\d+)\t(.*)$")
 LEADING_COMMANDS = re.compile(r"^(?:(?:@v[^.]+\.|@z\d+\.|@s\d+\.|@a\d+\.))*")
 VIDEO_NAMES = ("op2", "ed")
 MAX_UPLOAD = 300 * 1024 * 1024
+WINDOWS_ENV_REFERENCE = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)%")
+CONFIG_PATH_KEYS = (
+    "project_dir", "original_dialogue", "original_script", "original_story_font",
+    "original_system_font", "arabic_font_path", "data_rom", "sdu_bin",
+    "enter_extractor_bin", "patch_source", "kaleido_path", "ruby_bin",
+    "suyu_load_dir",
+)
+EXECUTABLE_PATH_KEYS = frozenset(("sdu_bin", "enter_extractor_bin", "ruby_bin"))
 
 
 def _read_json(path: Path, fallback: dict) -> dict:
@@ -63,24 +71,45 @@ def _safe_within(root: Path, relative: str) -> Path:
     return candidate
 
 
+def _config_path(config_path: Path, value: str | Path) -> Path:
+    """Resolve a user path, including Windows environment variables, from the config file."""
+    expanded = os.path.expandvars(os.path.expanduser(str(value)))
+
+    def replace_variable(match: re.Match[str]) -> str:
+        name = match.group(1)
+        if name not in os.environ:
+            raise ValueError(f"Environment variable %{name}% is not set")
+        return os.environ[name]
+
+    expanded = WINDOWS_ENV_REFERENCE.sub(replace_variable, expanded)
+    path = Path(expanded)
+    if not path.is_absolute():
+        path = config_path.parent / path
+    return path.resolve()
+
+
 def _png_dimensions(data: bytes) -> tuple[int, int]:
     if len(data) < 24 or data[:8] != b"\x89PNG\r\n\x1a\n" or data[12:16] != b"IHDR":
         raise ValueError("Upload must be a PNG")
     return struct.unpack(">II", data[16:24])
 
 
-def _patch_kaleido_binary_io(kaleido_copy: Path) -> None:
-    """Keep the copied Ruby repacker from translating binary bytes on Windows.
+def _patch_kaleido_binary_io(kaleido_copy: Path, patch_copy: Path) -> None:
+    """Make a disposable compiler copy use binary I/O and UTF-8 on Windows.
 
     Kaleido's original text-mode reads can change CRLF and treat 0x1A as EOF
-    when it packs FNT6, PIC, TXA, or MP4 files. Never alter the user's checkout.
+    when it packs FNT6, PIC, TXA, or MP4 files. Its dialogue reader uses the
+    machine's default encoding, which can corrupt Japanese or Arabic text.
+    Never alter the user's checkout.
     """
     replacements = (
-        ("rom-repack/toolkit.rb", "File.read(entry_path)", "File.binread(entry_path)"),
-        ("rom-repack/scenario.rb", "File.write(file, data)", "File.binwrite(file, data)"),
+        (kaleido_copy / "rom-repack/toolkit.rb", "File.read(entry_path)", "File.binread(entry_path)"),
+        (kaleido_copy / "rom-repack/scenario.rb", "File.write(file, data)", "File.binwrite(file, data)"),
+        (kaleido_copy / "rom-repack/kal_tl.rb", "File.read(e).lines", "File.read(e, encoding: 'UTF-8').lines"),
+        (patch_copy / "compile.rb", "require 'fileutils'", "require 'fileutils'\nrequire 'rbconfig'"),
+        (patch_copy / "compile.rb", "kaleido_cmd = ['ruby', 'kal_tl.rb',", "kaleido_cmd = [RbConfig.ruby, 'kal_tl.rb',"),
     )
-    for relative, old, new in replacements:
-        path = kaleido_copy / relative
+    for path, old, new in replacements:
         source = path.read_text(encoding="utf-8")
         if new in source:
             continue
@@ -93,7 +122,18 @@ class Project:
     def __init__(self, config_path: Path):
         self.config_path = config_path.resolve()
         self.config = _read_json(self.config_path, {})
-        self.root = Path(self.config["project_dir"]).expanduser().resolve()
+        for key in CONFIG_PATH_KEYS:
+            value = self.config.get(key)
+            if not value:
+                continue
+            if key in EXECUTABLE_PATH_KEYS and not any(sep in str(value) for sep in ("/", "\\", "%", "~", "$")):
+                continue  # A bare executable name should still be looked up on PATH.
+            self.config[key] = str(_config_path(self.config_path, value))
+        if self.config.get("ruby_load_paths"):
+            self.config["ruby_load_paths"] = [
+                str(_config_path(self.config_path, value)) for value in self.config["ruby_load_paths"]
+            ]
+        self.root = Path(self.config["project_dir"])
         self.root.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
         self.original_dialogue = Path(self.config["original_dialogue"]).read_text(encoding="utf-8")
@@ -161,7 +201,13 @@ class Project:
             }
 
     def arabic_font_path(self) -> Path:
-        return Path(self.config.get("arabic_font_path", DEFAULT_ARABIC_FONT)).expanduser().resolve()
+        configured = self.config.get("arabic_font_path")
+        if not configured:
+            return DEFAULT_ARABIC_FONT.resolve()
+        return _config_path(self.config_path, configured)
+
+    def suyu_load_dir(self) -> Path:
+        return _config_path(self.config_path, self.config.get("suyu_load_dir") or "%APPDATA%/suyu/load")
 
     def dialogue_page(self, q: str, offset: int, limit: int, filter_name: str) -> dict:
         q = q.casefold().strip()
@@ -353,7 +399,7 @@ class Project:
                 Path(self.config["kaleido_path"]).resolve(), kaleido_copy,
                 ignore=shutil.ignore_patterns(".git", "__pycache__"),
             )
-            _patch_kaleido_binary_io(kaleido_copy)
+            _patch_kaleido_binary_io(kaleido_copy, patch)
             (workspace / "output").mkdir(parents=True)
             edits_path = workspace / "edited-dialogue.txt"
             edits_path.write_text(self._edited_dialogue(), encoding="utf-8")
@@ -384,11 +430,10 @@ class Project:
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(video, destination)
             env = os.environ.copy()
-            # The configured `ruby` may itself be a symlink to `ruby3.2`.
-            # Keep its containing directory on PATH for compile.rb's child process.
-            env["PATH"] = str(Path(self.config["ruby_bin"]).absolute().parent) + os.pathsep + env.get("PATH", "")
-            if self.config.get("ruby_lib_dir"):
-                env["LD_LIBRARY_PATH"] = self.config["ruby_lib_dir"] + os.pathsep + env.get("LD_LIBRARY_PATH", "")
+            # Keep a configured Ruby installation available to child processes.
+            ruby_bin = self.config["ruby_bin"]
+            if any(sep in ruby_bin for sep in ("/", "\\")):
+                env["PATH"] = str(Path(ruby_bin).parent) + os.pathsep + env.get("PATH", "")
             if self.config.get("ruby_load_paths"):
                 env["RUBYLIB"] = os.pathsep.join(self.config["ruby_load_paths"])
             patch_output = workspace / "output" / "patch.rom"
@@ -420,7 +465,7 @@ class Project:
             patch = self.root / "build" / "patch.rom"
             if not patch.is_file():
                 raise ValueError("Export a patch before installing")
-            title_root = Path(self.config["suyu_load_dir"]).expanduser().resolve() / self.config["title_id"]
+            title_root = self.suyu_load_dir() / self.config["title_id"]
             mod_name = self.config.get("mod_name", "Kaleido2-Arabic-Editor")
             destination = title_root / mod_name / "romfs" / "patch.rom"
             conflicts = sorted(str(path.parent.parent.name) for path in title_root.glob("*/romfs/patch.rom") if path != destination)

@@ -8,28 +8,34 @@ permissions:
   contents: read
 
 jobs:
-  engine:
-    name: Python engine (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
-    env:
-      KALEIDO_ARABIC_FONT: ${{ github.workspace }}/NotoSansArabic.ttf
+  windows:
+    name: Windows editor and engine
+    runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: pip
-      - name: Install Python dependencies
-        run: python -m pip install -r requirements.txt
-      - name: Download Noto Sans Arabic test font
-        run: >-
-          python -c "import os, urllib.request;
-          urllib.request.urlretrieve('https://raw.githubusercontent.com/google/fonts/e5ee31305efa101c2cae65f44d9642df2c8f0b4d/ofl/notosansarabic/NotoSansArabic%5Bwdth%2Cwght%5D.ttf', os.environ['KALEIDO_ARABIC_FONT'])"
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+      - name: Set up Windows editor through its batch launcher
+        shell: cmd
+        run: call setup.cmd
+        timeout-minutes: 12
+      - name: Verify bootstrap can be rerun safely
+        shell: cmd
+        run: .venv\Scripts\python.exe bootstrap_tools.py
+      - name: Smoke test downloaded tools and Ruby ROM compiler
+        shell: cmd
+        run: .venv\Scripts\python.exe ci\windows_smoke.py
+      - name: Check bundled Arabic font
+        shell: cmd
+        run: .venv\Scripts\python.exe -c "from engine.fnt6 import DEFAULT_ARABIC_FONT; assert DEFAULT_ARABIC_FONT.is_file(), DEFAULT_ARABIC_FONT"
       - name: Compile Python sources
-        run: python -m compileall -q app.py engine
-      - name: Run asset-free engine tests
-        run: python -m unittest discover -s engine/tests -v
+        shell: cmd
+        run: .venv\Scripts\python.exe -m compileall -q app.py engine ci
+      - name: Run asset-free application and engine tests
+        shell: cmd
+        run: .venv\Scripts\python.exe -m unittest discover -s engine/tests -v

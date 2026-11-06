@@ -26,50 +26,40 @@ script text in `main.snr` are handled by the text pipeline.
 ## Dependencies
 
 - A local, legally obtained `data.rom` extracted from the user's game.
-- `sdu` from [AuroraWright/shin](https://github.com/AuroraWright/shin) for
+- The Windows `sdu.exe` from [DCNick3/shin](https://github.com/DCNick3/shin/releases/tag/v0.8.1) for
   listing and extracting ROM entries.
-- `EnterExtractor` from
-  [DCNick3/EnterExtractor](https://github.com/DCNick3/EnterExtractor) for PNG
-  conversion and rebuilding PIC/TXA containers. Build it with CMake. The Python
-  wrapper adjusts Gerokasu 2's TXA header flags before passing them to this
+- The Windows `EnterExtractor.exe` from
+  [07th-mod/enter_extractor](https://github.com/07th-mod/enter_extractor/releases/tag/v1.0.0) for PNG
+  conversion and rebuilding PIC/TXA containers. `setup.cmd` downloads both
+  tools and verifies their release ZIP hashes. The Python wrapper adjusts
+  Gerokasu 2's TXA header flags before passing them to this
   older tool and restores the original flags afterward. This matters for
   `title.txa`, whose unadjusted value makes EnterExtractor crash.
 
 ## Command line
 
-Run these commands from the translator tool's root. Replace paths with local
-paths on the user's computer. No source game images are distributed with the
-translator tool.
+Run these commands in Command Prompt from the editor folder. Replace the ROM
+path with your own extracted file. No source game images are distributed with
+the editor.
 
-```bash
-python3 -m engine.images list \
-  --rom /path/to/data.rom --sdu /path/to/sdu
+```bat
+.venv\Scripts\python.exe -m engine.images list --rom C:/Kaleido2/game/data.rom --sdu tools/sdu.exe
 
-# Export the 14 menu/UI atlases into PROJECT/images/editable/txa/.
-python3 -m engine.images export \
-  --rom /path/to/data.rom --project /path/to/PROJECT \
-  --sdu /path/to/sdu --extractor /path/to/EnterExtractor
+rem Export the menu/UI atlases into project/images/editable/txa/.
+.venv\Scripts\python.exe -m engine.images export ^
+  --rom C:/Kaleido2/game/data.rom --project project ^
+  --sdu tools/sdu.exe --extractor tools/EnterExtractor.exe
 
-# Export one selected standalone picture. Repeat --select for more files.
-python3 -m engine.images export \
-  --rom /path/to/data.rom --project /path/to/PROJECT \
-  --sdu /path/to/sdu --extractor /path/to/EnterExtractor \
-  --select 'picture/card/カード裏面.pic'
+rem Export every PIC as well as the menu atlases.
+.venv\Scripts\python.exe -m engine.images export ^
+  --rom C:/Kaleido2/game/data.rom --project project ^
+  --sdu tools/sdu.exe --extractor tools/EnterExtractor.exe --all-pictures
 
-# Or export every PIC as well as the menu atlases.
-python3 -m engine.images export \
-  --rom /path/to/data.rom --project /path/to/PROJECT \
-  --sdu /path/to/sdu --extractor /path/to/EnterExtractor \
-  --all-pictures
-
-# The editor can use the returned absolute PNG paths as live image previews.
-python3 -m engine.images previews --project /path/to/PROJECT
-
-# After editing PNGs, build only changed PIC/TXA files.
-python3 -m engine.images import \
-  --project /path/to/PROJECT \
-  --patch-root /path/to/PROJECT/patch-images \
-  --extractor /path/to/EnterExtractor
+rem List previews and build only changed PIC/TXA files.
+.venv\Scripts\python.exe -m engine.images previews --project project
+.venv\Scripts\python.exe -m engine.images import ^
+  --project project --patch-root project/patch-images ^
+  --extractor tools/EnterExtractor.exe
 ```
 
 `PROJECT/images/manifest.json` records each exported PNG's original hash and

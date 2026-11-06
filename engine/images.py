@@ -4,13 +4,14 @@ The project directory holds user-owned working copies of decoded PNGs. This
 module never bundles game artwork; it reads a local ``data.rom`` supplied by
 the user and produces only the changed image containers for a patch build.
 
-Requires ``sdu`` from AuroraWright/shin and ``EnterExtractor`` from
-DCNick3/EnterExtractor. Neither command is invoked through a shell.
+Requires ``sdu`` from DCNick3/shin and ``EnterExtractor`` from
+07th-mod/enter_extractor. Neither command is invoked through a shell.
 """
 
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -29,6 +30,43 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 class ImagePipelineError(RuntimeError):
     """A game image could not be exported or rebuilt safely."""
+
+
+@contextmanager
+def _extractor_workspace() -> Iterable[Path]:
+    """Give EnterExtractor ASCII arguments even if the project has Unicode paths.
+
+    Its Windows build opens the input using narrow ``argv[1]``. The default
+    Windows temp path can itself contain a Unicode account name, so try a
+    shared ASCII path when necessary.
+    """
+    explicit = os.environ.get("KALEIDO_ASCII_TEMP_DIR")
+    if explicit:
+        candidates = [Path(explicit)]
+    else:
+        candidates = [Path(tempfile.gettempdir())]
+        if os.name == "nt":
+            public = os.environ.get("PUBLIC")
+            if public:
+                candidates.extend((Path(public) / "Documents", Path(public)))
+            drive = os.environ.get("SystemDrive")
+            if drive:
+                candidates.append(Path(drive + os.sep) / "Temp")
+    for base in candidates:
+        if not str(base).isascii():
+            continue
+        try:
+            base.mkdir(parents=True, exist_ok=True)
+            temporary = tempfile.TemporaryDirectory(prefix="kaleido-images-", dir=base)
+        except OSError:
+            continue
+        with temporary as name:
+            yield Path(name)
+        return
+    raise ImagePipelineError(
+        "No writable ASCII-only temporary directory for EnterExtractor; "
+        "set KALEIDO_ASCII_TEMP_DIR to one"
+    )
 
 
 def _binary(path: str | Path) -> str:
@@ -55,7 +93,8 @@ def _rom_relative(name: str) -> str:
     """Normalize a ROM entry to a safe path relative to the archive root."""
     clean = name.lstrip("/")
     path = PurePosixPath(clean)
-    if not clean or path.is_absolute() or any(part in ("", ".", "..") for part in path.parts):
+    if (not clean or "\\" in clean or ":" in clean or path.is_absolute()
+            or any(part in ("", ".", "..") for part in path.parts)):
         raise ImagePipelineError(f"Invalid ROM asset path: {name!r}")
     return path.as_posix()
 
@@ -63,7 +102,8 @@ def _rom_relative(name: str) -> str:
 def _manifest_file(root: Path, name: str) -> Path:
     """Resolve a manifest path without permitting reads outside its project."""
     relative = PurePosixPath(name)
-    if relative.is_absolute() or any(part in ("", ".", "..") for part in relative.parts):
+    if ("\\" in name or ":" in name or relative.is_absolute()
+            or any(part in ("", ".", "..") for part in relative.parts)):
         raise ImagePipelineError(f"Unsafe image manifest path: {name!r}")
     resolved = (root / relative).resolve()
     if not resolved.is_relative_to(root.resolve()):
@@ -218,17 +258,27 @@ def export_images(
         if asset["kind"] == "pic":
             png = image_root / "editable" / "pic" / PurePosixPath(name).with_suffix(".png")
             png.parent.mkdir(parents=True, exist_ok=True)
-            _run([extractor, str(raw), str(png)])
+            with _extractor_workspace() as staged:
+                source = staged / "source.pic"
+                output = staged / "preview.png"
+                shutil.copy2(raw, source)
+                _run([extractor, str(source), str(output)])
+                shutil.copy2(output, png)
             pngs = [png]
         else:
             rel = PurePosixPath(name)
             directory = image_root / "editable" / "txa" / rel.with_suffix("")
             directory.mkdir(parents=True, exist_ok=True)
-            before = set(directory.glob("*.png"))
-            with tempfile.TemporaryDirectory(prefix="txa-decode-", dir=image_root) as temporary:
-                adapted = _txa_for_extractor(raw, Path(temporary) / "normalized.txa")
-                _run([extractor, str(adapted), str(directory / (rel.stem + ".png"))])
-            pngs = sorted(set(directory.glob("*.png")) - before)
+            with _extractor_workspace() as staged:
+                source = staged / "source.txa"
+                shutil.copy2(raw, source)
+                adapted = _txa_for_extractor(source, staged / "normalized.txa")
+                _run([extractor, str(adapted), str(staged / "preview.png")])
+                pngs = []
+                for decoded in sorted(staged.glob("preview_*.png")):
+                    target = directory / (rel.stem + decoded.name[len("preview"):])
+                    shutil.copy2(decoded, target)
+                    pngs.append(target)
             if not pngs:
                 raise ImagePipelineError(f"No PNG textures decoded from {name}")
         manifest["assets"][name] = {
@@ -322,20 +372,32 @@ def import_images(
             raw = image_root / "raw" / name
             output = temp / "built" / name
             output.parent.mkdir(parents=True, exist_ok=True)
-            if manifest["assets"][name]["kind"] == "pic":
-                _run([extractor, str(raw), str(output), "-replace", str(pngs[0])])
-            else:
-                rel = PurePosixPath(name)
-                replacement_dir = temp / "replacement" / rel.with_suffix("")
-                replacement_dir.mkdir(parents=True, exist_ok=True)
-                for png in pngs:
-                    shutil.copy2(png, replacement_dir / png.name)
-                prefix = replacement_dir / (rel.stem + ".png")
-                adapted = _txa_for_extractor(raw, temp / "normalized" / name)
-                _run([extractor, str(adapted), str(output), "-replace", str(prefix)])
-                _restore_txa_flags(output, raw)
+            with _extractor_workspace() as staged:
+                kind = manifest["assets"][name]["kind"]
+                source = staged / ("source.pic" if kind == "pic" else "source.txa")
+                built = staged / ("built.pic" if kind == "pic" else "built.txa")
+                shutil.copy2(raw, source)
+                if kind == "pic":
+                    replacement = staged / "replacement.png"
+                    shutil.copy2(pngs[0], replacement)
+                    _run([extractor, str(source), str(built), "-replace", str(replacement)])
+                else:
+                    rel = PurePosixPath(name)
+                    replacement_dir = staged / "replacement"
+                    replacement_dir.mkdir()
+                    prefix = rel.stem + "_"
+                    for png in pngs:
+                        if not png.name.startswith(prefix):
+                            raise ImagePipelineError(f"Unexpected TXA image name: {png.name}")
+                        shutil.copy2(png, replacement_dir / ("preview_" + png.name[len(prefix):]))
+                    adapted = _txa_for_extractor(source, staged / "normalized.txa")
+                    _run([extractor, str(adapted), str(built), "-replace", str(replacement_dir / "preview.png")])
+                    _restore_txa_flags(built, source)
+                shutil.copy2(built, output)
             expected_magic = b"PIC4" if manifest["assets"][name]["kind"] == "pic" else b"TXA4"
-            if output.open("rb").read(4) != expected_magic:
+            with output.open("rb") as built_file:
+                actual_magic = built_file.read(4)
+            if actual_magic != expected_magic:
                 raise ImagePipelineError(f"Repacked container has wrong format: {output}")
 
         removed = []

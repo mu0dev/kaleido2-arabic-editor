@@ -16,9 +16,8 @@ from PIL import Image, ImageDraw
 from .shaping import ArabicFont
 
 
-DEFAULT_ARABIC_FONT = Path(
-    os.environ.get("KALEIDO_ARABIC_FONT", "/usr/share/fonts/truetype/noto/NotoSansArabic-Regular.ttf")
-)
+BUNDLED_ARABIC_FONT = Path(__file__).resolve().parents[1] / "assets" / "NotoSansArabic.ttf"
+DEFAULT_ARABIC_FONT = Path(os.environ.get("KALEIDO_ARABIC_FONT", str(BUNDLED_ARABIC_FONT)))
 PAGE_BYTES = 514
 DESC_BYTES = 24
 HEADER_BYTES = 32

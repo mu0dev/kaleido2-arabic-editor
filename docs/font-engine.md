@@ -29,10 +29,10 @@ for display in an editor.
 
 Run from the directory containing the `engine` package:
 
-```bash
-python3 -m engine export \
-  --edited edits.txt --original dialogue.txt \
-  --story-font newrodin-medium.fnt --system-font system.fnt \
+```bat
+.venv\Scripts\python.exe -m engine export ^
+  --edited edits.txt --original dialogue.txt ^
+  --story-font newrodin-medium.fnt --system-font system.fnt ^
   --out build
 ```
 
@@ -60,7 +60,7 @@ game-specific asset or script location.
 - If a translated line has ruby annotations (`@b`, `@<`, `@>`), flatten them
   into ordinary Arabic text. The exporter reports any ruby commands still
   present in an Arabic line.
-- The default Arabic font is Noto Sans Arabic. `fc-query` verifies coverage;
+- The default Arabic font is the bundled Noto Sans Arabic. `fontTools` verifies coverage;
   unsupported characters are reported before font generation.
 - The glyph allocator first uses BMP Private Use codepoints, then free Hangul
   and CJK codepoints absent from both original fonts and original script. All
