@@ -44,7 +44,7 @@ Edits and image previews update immediately **in the browser**. The running game
 
 ## Development verification
 
-The Linux launcher served the local editor in the development environment. Eleven engine tests passed on both Ubuntu and Windows in GitHub Actions. A separate Linux smoke project saved Arabic dialogue, a speaker name, a save title, and a modified PNG through the editor API; the build and Suyu installer completed. Suyu mounted that generated patch and reached the title menu. Earlier in-game checks also displayed Arabic dialogue and a speaker name. These checks establish a working editing and patch pipeline on the tested Linux setup. The Windows game build path has not been tested end to end with game assets on Windows. The full game still needs translator work and in-game review of each changed screen.
+The Linux launcher served the local editor in the development environment. Twelve asset-free checks, including an HTTP startup test, passed on both Ubuntu and Windows in GitHub Actions. A separate Linux smoke project saved Arabic dialogue, a speaker name, a save title, and a modified PNG through the editor API; the build and Suyu installer completed. Suyu mounted that generated patch and reached the title menu. Earlier in-game checks also displayed Arabic dialogue and a speaker name. These checks establish a working editing and patch pipeline on the tested Linux setup. The Windows game build path has not been tested end to end with game assets on Windows. The full game still needs translator work and in-game review of each changed screen.
 
 ## Limits to review in game
 
