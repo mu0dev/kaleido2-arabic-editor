@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Kaleido Arabic · Translation workspace</title>
+  <link rel="stylesheet" href="./style.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Workspace navigation">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">ك</div>
+        <div>
+          <strong>Kaleido Arabic</strong>
+          <span>Translation workspace</span>
+        </div>
+      </div>
+      <nav class="nav" aria-label="Sections">
+        <button class="nav-item active" data-tab="dialogue" type="button" aria-current="page">
+          <span class="nav-icon" aria-hidden="true">◫</span><span>Dialogue</span><span class="nav-count" id="nav-dialogue-count">—</span>
+        </button>
+        <button class="nav-item" data-tab="strings" type="button">
+          <span class="nav-icon" aria-hidden="true">⌘</span><span>UI strings</span><span class="nav-count" id="nav-strings-count">—</span>
+        </button>
+        <button class="nav-item" data-tab="images" type="button">
+          <span class="nav-icon" aria-hidden="true">▧</span><span>Images</span><span class="nav-count" id="nav-images-count">—</span>
+        </button>
+        <button class="nav-item" data-tab="videos" type="button">
+          <span class="nav-icon" aria-hidden="true">▷</span><span>Videos</span><span class="nav-count" id="nav-videos-count">2</span>
+        </button>
+        <button class="nav-item" data-tab="export" type="button">
+          <span class="nav-icon" aria-hidden="true">↗</span><span>Export</span>
+        </button>
+      </nav>
+      <div class="sidebar-foot">
+        <span class="live-dot" aria-hidden="true"></span>
+        <span id="connection-state">Connecting…</span>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Local project</p>
+          <h1 id="page-title">Dialogue</h1>
+        </div>
+        <div class="topbar-actions">
+          <span class="progress-label" id="top-progress">Loading coverage…</span>
+          <span class="shortcut-hint"><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>S</kbd> to save</span>
+        </div>
+      </header>
+
+      <section class="view active" id="view-dialogue" aria-labelledby="page-title">
+        <div class="workspace-grid">
+          <section class="list-panel" aria-label="Dialogue entries">
+            <div class="panel-head">
+              <div class="panel-title-row"><h2>Script</h2><span class="muted" id="dialogue-result-count">— entries</span></div>
+              <p>Search the full game script and choose a line to translate.</p>
+            </div>
+            <div class="search-row">
+              <label class="search-wrap">
+                <span class="sr-only">Search dialogue</span>
+                <span class="search-icon" aria-hidden="true">⌕</span>
+                <input id="dialogue-search" type="search" autocomplete="off" placeholder="Search Japanese, Arabic, or ID">
+              </label>
+              <label class="sr-only" for="dialogue-filter">Filter dialogue</label>
+              <select id="dialogue-filter" title="Filter dialogue">
+                <option value="all">All</option>
+                <option value="untranslated">Untranslated</option>
+                <option value="translated">Translated</option>
+              </select>
+            </div>
+            <div class="entry-list" id="dialogue-list" aria-live="polite"></div>
+            <div class="list-footer">
+              <span id="dialogue-page-label">—</span>
+              <div class="pager"><button type="button" id="dialogue-prev" aria-label="Previous dialogue page">←</button><button type="button" id="dialogue-next" aria-label="Next dialogue page">→</button></div>
+            </div>
+          </section>
+
+          <section class="editor-panel" aria-label="Dialogue editor">
+            <div class="editor-empty" id="dialogue-empty">Select a script line to begin.</div>
+            <div id="dialogue-editor" hidden>
+              <div class="editor-head">
+                <div><span class="eyebrow">Selected line</span><h2 id="dialogue-id">—</h2></div>
+                <span class="state-pill" id="dialogue-state">Untranslated</span>
+              </div>
+              <div class="source-block">
+                <div class="field-heading"><span>Original Japanese</span><span class="muted" id="dialogue-voice"></span></div>
+                <div class="source-text" id="dialogue-source" lang="ja" dir="auto"></div>
+              </div>
+              <div class="name-row">
+                <div><span class="field-label">Speaker</span><strong id="speaker-source" lang="ja">—</strong></div>
+                <label><span class="sr-only">Arabic speaker name</span><input id="speaker-translation" type="text" dir="rtl" lang="ar" placeholder="Arabic name"></label>
+                <button class="button secondary small" type="button" id="save-speaker">Save name</button>
+              </div>
+              <div class="field-heading translation-heading"><label for="dialogue-translation">Arabic translation</label><span class="muted" id="dialogue-chars">0 characters</span></div>
+              <textarea id="dialogue-translation" dir="rtl" lang="ar" spellcheck="true" placeholder="اكتب الترجمة العربية هنا…"></textarea>
+              <div class="preview-wrap">
+                <div class="field-heading"><span>Live preview</span><span class="preview-badge">RTL</span></div>
+                <div class="preview-card" dir="rtl" lang="ar">
+                  <strong id="preview-speaker">—</strong>
+                  <p id="dialogue-preview">Your translation appears here as you type.</p>
+                </div>
+              </div>
+              <div class="editor-actions"><span id="dialogue-save-state" class="save-state" role="status"></span><button class="button primary" type="button" id="save-dialogue">Save translation <span aria-hidden="true">→</span></button></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-strings" aria-labelledby="page-title" hidden>
+        <div class="workspace-grid">
+          <section class="list-panel" aria-label="UI string entries">
+            <div class="panel-head"><div class="panel-title-row"><h2>Interface text</h2><span class="muted" id="strings-result-count">— entries</span></div><p>Choices, save labels, music titles, and other script text.</p></div>
+            <div class="search-row"><label class="search-wrap"><span class="sr-only">Search UI strings</span><span class="search-icon" aria-hidden="true">⌕</span><input id="strings-search" type="search" placeholder="Search strings" autocomplete="off"></label><label class="sr-only" for="strings-filter">Filter UI strings</label><select id="strings-filter"><option value="all">All</option><option value="untranslated">Untranslated</option><option value="translated">Translated</option></select></div>
+            <div class="entry-list" id="strings-list" aria-live="polite"></div>
+          </section>
+          <section class="editor-panel" aria-label="UI string editor">
+            <div class="editor-empty" id="strings-empty">Select an interface string to begin.</div>
+            <div id="strings-editor" hidden>
+              <div class="editor-head"><div><span class="eyebrow" id="string-section">Interface text</span><h2 id="string-id">—</h2></div><span class="state-pill" id="string-state">Untranslated</span></div>
+              <div class="source-block"><div class="field-heading"><span>Original Japanese</span></div><div class="source-text" id="string-source" lang="ja" dir="auto"></div></div>
+              <div class="field-heading translation-heading"><label for="string-translation">Arabic translation</label><span class="muted" id="string-chars">0 characters</span></div>
+              <textarea id="string-translation" dir="rtl" lang="ar" spellcheck="true" placeholder="اكتب ترجمة الواجهة هنا…"></textarea>
+              <div class="preview-wrap"><div class="field-heading"><span>Live preview</span><span class="preview-badge">RTL</span></div><div class="preview-card string-preview" dir="rtl" lang="ar"><p id="string-preview">Your translation appears here as you type.</p></div></div>
+              <div class="editor-actions"><span id="string-save-state" class="save-state" role="status"></span><button class="button primary" type="button" id="save-string">Save string <span aria-hidden="true">→</span></button></div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-images" aria-labelledby="page-title" hidden>
+        <div class="workspace-grid image-workspace">
+          <section class="list-panel image-list-panel" aria-label="Image browser">
+            <div class="panel-head"><div class="panel-title-row"><h2>Image assets</h2><span class="muted" id="images-result-count">— images</span></div><p>Replace Japanese text painted into menus and artwork.</p><button class="text-button extract-button" type="button" id="extract-images">Extract all game images</button></div>
+            <div class="search-row"><label class="search-wrap"><span class="sr-only">Search images</span><span class="search-icon" aria-hidden="true">⌕</span><input id="images-search" type="search" autocomplete="off" placeholder="Search image names"></label></div>
+            <div class="image-grid" id="images-grid" aria-live="polite"></div>
+            <div class="list-footer"><span id="images-page-label">—</span><div class="pager"><button type="button" id="images-prev" aria-label="Previous image page">←</button><button type="button" id="images-next" aria-label="Next image page">→</button></div></div>
+          </section>
+          <section class="editor-panel image-detail" aria-label="Image replacement">
+            <div class="editor-empty" id="images-empty">Select an image to preview or replace it.</div>
+            <div id="images-editor" hidden>
+              <div class="editor-head"><div><span class="eyebrow">Selected image</span><h2 id="image-name">—</h2></div><span class="state-pill" id="image-state">Original</span></div>
+              <p class="image-path muted" id="image-path"></p>
+              <div class="image-stage"><canvas id="image-canvas" role="img" aria-label="Live image translation preview"></canvas></div>
+              <p class="image-meta" id="image-size"></p>
+              <div class="canvas-tools">
+                <div class="field-heading"><span>Arabic text overlay</span><span class="muted">Click the image to place text</span></div>
+                <label class="tool-field tool-wide"><span>Text</span><textarea id="overlay-text" dir="rtl" lang="ar" rows="2" placeholder="اكتب النص العربي هنا…"></textarea></label>
+                <div class="tool-grid">
+                  <label class="tool-field"><span>X position</span><input id="overlay-x" type="number" min="0" step="1"></label>
+                  <label class="tool-field"><span>Y position</span><input id="overlay-y" type="number" min="0" step="1"></label>
+                  <label class="tool-field"><span>Font size</span><input id="overlay-size" type="number" min="6" max="300" step="1"></label>
+                  <label class="tool-field color-field"><span>Text color</span><input id="overlay-color" type="color" value="#ffffff"></label>
+                </div>
+                <label class="check-line"><input id="overlay-bold" type="checkbox" checked> Bold text</label>
+                <div class="tool-divider"></div>
+                <label class="check-line"><input id="cover-enabled" type="checkbox"> Cover old text with a solid rectangle</label>
+                <p class="tool-help">When cover is on, drag across the image to size the rectangle.</p>
+                <div class="tool-grid" id="cover-fields">
+                  <label class="tool-field"><span>X position</span><input id="cover-x" type="number" min="0" step="1"></label>
+                  <label class="tool-field"><span>Y position</span><input id="cover-y" type="number" min="0" step="1"></label>
+                  <label class="tool-field"><span>Width</span><input id="cover-width" type="number" min="0" step="1"></label>
+                  <label class="tool-field"><span>Height</span><input id="cover-height" type="number" min="0" step="1"></label>
+                  <label class="tool-field color-field"><span>Cover color</span><input id="cover-color" type="color" value="#203027"></label>
+                </div>
+                <button id="reset-overlay" class="text-button" type="button">Clear overlay controls</button>
+              </div>
+              <div class="upload-box">
+                <div><strong>Save image replacement</strong><p>Save your overlay as a PNG, or choose an externally edited PNG. The original dimensions stay unchanged.</p></div>
+                <input id="image-file" type="file" accept="image/png" hidden>
+                <div class="upload-actions"><a id="image-download" class="button secondary" download>Download PNG</a><button id="choose-image" class="button secondary" type="button">Choose replacement</button><button id="upload-image" class="button primary" type="button" disabled>Save image <span aria-hidden="true">→</span></button></div>
+                <span id="image-upload-state" class="save-state" role="status"></span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="view" id="view-videos" aria-labelledby="page-title" hidden>
+        <div class="videos-page">
+          <div class="export-intro"><span class="eyebrow">Opening and ending</span><h2>Video assets</h2><p>The OP and ED may have text baked into their frames. Replace them with externally edited MP4 files while keeping audio and timing in sync.</p></div>
+          <div class="video-grid" id="video-grid"></div>
+          <div class="video-editor" id="video-editor" hidden>
+            <div class="editor-head"><div><span class="eyebrow">Selected video</span><h2 id="video-name">—</h2></div><span class="state-pill" id="video-state">Original</span></div>
+            <video id="video-preview" controls preload="metadata" playsinline aria-label="Game video preview"></video>
+            <p class="muted" id="video-path"></p>
+            <div class="upload-box"><strong>Replace this video</strong><p>Prepare an MP4 externally, then upload it here. Check playback, subtitles, audio, and duration in the game.</p><input id="video-file" type="file" accept="video/mp4,.mp4" hidden><div class="upload-actions"><button id="choose-video" class="button secondary" type="button">Choose MP4</button><button id="upload-video" class="button primary" type="button" disabled>Save video <span aria-hidden="true">→</span></button></div><span id="video-upload-state" class="save-state" role="status"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="view" id="view-export" aria-labelledby="page-title" hidden>
+        <div class="export-page">
+          <div class="export-intro"><span class="eyebrow">Progress and output</span><h2>Build a playable patch</h2><p>Review translation coverage, compile changed content, and install the patch into Suyu for testing.</p></div>
+          <div class="metric-grid" id="coverage-grid"></div>
+          <div class="export-actions">
+            <div class="action-card"><span class="action-number">01</span><div><h3>Build patch</h3><p>Compile saved text and image edits into a game patch.</p></div><button class="button primary" type="button" id="build-patch">Build patch <span aria-hidden="true">→</span></button></div>
+            <div class="action-card"><span class="action-number">02</span><div><h3>Install to Suyu</h3><p>Place the built patch in this game's Suyu mod folder.</p></div><button class="button secondary" type="button" id="install-patch">Install patch <span aria-hidden="true">→</span></button></div>
+          </div>
+          <div class="log-card"><div class="field-heading"><span>Build activity</span><button type="button" class="text-button" id="clear-log">Clear</button></div><pre id="activity-log" aria-live="polite">No actions yet.</pre></div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

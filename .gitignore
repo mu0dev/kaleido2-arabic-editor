@@ -1,0 +1,30 @@
+# Machine-specific configuration and generated project data
+config.local.json
+project/
+build/
+*.log
+
+# Extracted game assets and generated patch files
+*.rom
+*.xci
+*.nsp
+*.nca
+*.fnt
+*.txa
+*.pic
+*.bup
+*.mp4
+*.png
+*.bmp
+*.jpg
+*.jpeg
+*.webp
+*.wav
+*.ogg
+
+# Python runtime files
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
