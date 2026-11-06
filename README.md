@@ -26,10 +26,9 @@ Install Python 3.10+, Ruby, and Windows builds of `sdu` and `EnterExtractor`. In
 py -3 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 copy config.example.json config.local.json
-run.cmd
 ```
 
-Edit `config.local.json` before running `run.cmd`: use absolute paths with forward slashes, such as `C:/Games/Kaleido/data.rom`, which are valid in JSON. Set `arabic_font_path` to your Noto Sans Arabic Regular TTF, `ruby_bin` to `ruby.exe`, `sdu_bin` and `enter_extractor_bin` to their Windows executables, and `suyu_load_dir` to the actual Suyu `load` directory on your installation. Point `patch_source` and `kaleido_path` to the required local checkouts. Close the game before installing a patch so Suyu does not lock the old file. Run `run.cmd 8780` to choose another local port. The server binds to localhost by default.
+Edit `config.local.json` before running `run.cmd`: use absolute paths with forward slashes, such as `C:/Games/Kaleido/data.rom`, which are valid in JSON. Set `arabic_font_path` to your Noto Sans Arabic Regular TTF, `ruby_bin` to `ruby.exe`, `sdu_bin` and `enter_extractor_bin` to their Windows executables, and `suyu_load_dir` to the actual Suyu `load` directory on your installation. Point `patch_source` and `kaleido_path` to the required local checkouts. Then run `run.cmd`. Close the game before installing a patch so Suyu does not lock the old file. Run `run.cmd 8780` to choose another local port. The server binds to localhost by default.
 
 ## Translate and build
 
@@ -45,7 +44,7 @@ Edits and image previews update immediately **in the browser**. The running game
 
 ## Development verification
 
-The Linux launcher served the local editor in the development environment. Ten engine tests passed. A separate smoke project saved Arabic dialogue, a speaker name, a save title, and a modified PNG through the editor API; the build and Suyu installer completed. Suyu mounted that generated patch and reached the title menu. Earlier in-game checks also displayed Arabic dialogue and a speaker name. These checks establish a working editing and patch pipeline on the tested Linux setup. The Windows build path has not been tested end to end on Windows. The full game still needs translator work and in-game review of each changed screen.
+The Linux launcher served the local editor in the development environment. Eleven engine tests passed on both Ubuntu and Windows in GitHub Actions. A separate Linux smoke project saved Arabic dialogue, a speaker name, a save title, and a modified PNG through the editor API; the build and Suyu installer completed. Suyu mounted that generated patch and reached the title menu. Earlier in-game checks also displayed Arabic dialogue and a speaker name. These checks establish a working editing and patch pipeline on the tested Linux setup. The Windows game build path has not been tested end to end with game assets on Windows. The full game still needs translator work and in-game review of each changed screen.
 
 ## Limits to review in game
 
