@@ -196,6 +196,12 @@
       <section class="view" id="view-export" aria-labelledby="page-title" hidden>
         <div class="export-page">
           <div class="export-intro"><span class="eyebrow">Progress and output</span><h2>Build a playable patch</h2><p>Review translation coverage, compile changed content, and install the patch into Suyu for testing.</p></div>
+          <section class="setup-notice" id="setup-notice" aria-labelledby="setup-notice-title" role="status" hidden>
+            <div class="setup-notice-head"><span class="setup-notice-icon" aria-hidden="true">!</span><h3 id="setup-notice-title">Game files needed</h3></div>
+            <p id="setup-notice-detail"></p>
+            <ul id="missing-files-list"></ul>
+            <p class="setup-notice-help">Open <code>config.local.json</code> beside <code>run.cmd</code> and correct the listed settings, then save and restart <code>run.cmd</code>. Set <code>data_rom</code> to your extracted <code>data.rom</code>; the editor gets both original <code>.fnt</code> files from it automatically. Use forward slashes in JSON paths.</p>
+          </section>
           <div class="metric-grid" id="coverage-grid"></div>
           <div class="export-actions">
             <div class="action-card"><span class="action-number">01</span><div><h3>Build patch</h3><p>Compile saved text and image edits into a game patch.</p></div><button class="button primary" type="button" id="build-patch">Build patch <span aria-hidden="true">→</span></button></div>

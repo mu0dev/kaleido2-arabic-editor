@@ -184,6 +184,7 @@ class Project:
         with self.lock:
             image_rows = preview_images(self.root)
             video_rows = self.videos()
+            missing_files = self.missing_files()
             return {
                 "dialogue": {"total": len(self.entries), "translated": len(self.edits)},
                 "names": {"total": len(self.name_counts), "translated": len(self.names)},
@@ -194,11 +195,67 @@ class Project:
                 },
                 "images": {"total": len(image_rows), "modified": sum(row["modified"] for row in image_rows)},
                 "videos": {"total": len(video_rows), "modified": sum(row["modified"] for row in video_rows)},
-                "ready": all(Path(self.config[key]).is_file() for key in (
-                    "original_dialogue", "original_script", "original_story_font", "original_system_font", "data_rom"
-                )) and self.arabic_font_path().is_file(),
+                "ready": not missing_files,
+                "missing_files": missing_files,
+                "auto_extract_fonts": any(
+                    not self.config.get(key) or not Path(self.config[key]).is_file()
+                    for key in ("original_story_font", "original_system_font")
+                ),
                 "last_export": self.last_export,
             }
+
+    def missing_files(self) -> list[dict[str, str]]:
+        """Report missing build inputs using the keys users can edit in config.local.json."""
+        missing: list[dict[str, str]] = []
+        for key in ("original_dialogue", "original_script", "data_rom"):
+            value = self.config.get(key, "")
+            if not value or not Path(value).is_file():
+                missing.append({"key": key, "path": str(value)})
+        for key, required in (("patch_source", "compile.rb"), ("kaleido_path", "rom-repack/kal_tl.rb")):
+            value = self.config.get(key, "")
+            if not value or not (Path(value) / required).is_file():
+                missing.append({"key": key, "path": str(Path(value) / required) if value else ""})
+        if not self.arabic_font_path().is_file():
+            missing.append({"key": "arabic_font_path", "path": str(self.arabic_font_path())})
+        fonts_missing = any(
+            not self.config.get(key) or not Path(self.config[key]).is_file()
+            for key in ("original_story_font", "original_system_font")
+        )
+        if fonts_missing and not shutil.which(str(self.config.get("sdu_bin", "sdu.exe"))):
+            missing.append({"key": "sdu_bin", "path": str(self.config.get("sdu_bin", "sdu.exe"))})
+        ruby = str(self.config.get("ruby_bin", "ruby.exe"))
+        if not shutil.which(ruby):
+            missing.append({"key": "ruby_bin", "path": ruby})
+        return missing
+
+    def original_font_paths(self, workspace: Path) -> tuple[Path, Path]:
+        """Use supplied fonts or extract the originals from the user's data.rom."""
+        resolved: list[Path] = []
+        for key, rom_name in (
+            ("original_story_font", "newrodin-medium.fnt"),
+            ("original_system_font", "system.fnt"),
+        ):
+            value = self.config.get(key)
+            if value and Path(value).is_file():
+                resolved.append(Path(value))
+                continue
+            destination = workspace / "original-fonts" / rom_name
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            process = subprocess.run(
+                [self.config["sdu_bin"], "rom", "extract-one", self.config["data_rom"],
+                 "/" + rom_name, str(destination)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
+            )
+            if process.returncode or not destination.is_file():
+                raise RuntimeError(
+                    f"Could not extract {rom_name} from data.rom. Check data_rom and sdu_bin "
+                    f"in config.local.json: {(process.stderr or process.stdout)[-400:]}"
+                )
+            with destination.open("rb") as source_font:
+                if source_font.read(4) != b"FNT6":
+                    raise RuntimeError(f"Extracted {rom_name} is not an FNT6 font; check data_rom")
+            resolved.append(destination)
+        return resolved[0], resolved[1]
 
     def arabic_font_path(self) -> Path:
         configured = self.config.get("arabic_font_path")
@@ -385,6 +442,10 @@ class Project:
 
     def export(self) -> dict:
         with self.lock:
+            missing = self.missing_files()
+            if missing:
+                details = "; ".join(f"{item['key']}: {item['path']}" for item in missing)
+                raise ValueError(f"Build setup is incomplete. Edit config.local.json and restart run.cmd: {details}")
             build_root = self.root / "build"
             workspace = build_root / "workspace"
             if workspace.exists():
@@ -406,9 +467,10 @@ class Project:
             ui_path = workspace / "ui-edits.json"
             ui_path.write_text(json.dumps(self.strings, ensure_ascii=False), encoding="utf-8")
             generated = workspace / "generated"
+            original_story_font, original_system_font = self.original_font_paths(workspace)
             result = export_patch(
                 edits_path, self.config["original_dialogue"],
-                self.config["original_story_font"], self.config["original_system_font"],
+                original_story_font, original_system_font,
                 generated, ui_strings_path=ui_path,
                 arabic_font_path=self.arabic_font_path(),
             )

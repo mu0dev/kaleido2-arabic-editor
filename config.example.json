@@ -2,8 +2,6 @@
   "project_dir": "./project",
   "original_dialogue": "./dependencies/kaleido2-patch/dialogue.txt",
   "original_script": "./dependencies/kaleido2-patch/base/main.rb",
-  "original_story_font": "C:/Kaleido2/game/newrodin-medium.fnt",
-  "original_system_font": "C:/Kaleido2/game/system.fnt",
   "data_rom": "C:/Kaleido2/game/data.rom",
   "sdu_bin": "./tools/sdu.exe",
   "enter_extractor_bin": "./tools/EnterExtractor.exe",

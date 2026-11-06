@@ -9,7 +9,7 @@ if not exist "config.local.json" (
   call "%~dp0setup.cmd"
   if errorlevel 1 exit /b 1
   echo.
-  echo Edit config.local.json with your Windows game and tool paths, then run this file again.
+  echo Set the data_rom path in config.local.json, then run this file again.
   exit /b 1
 )
 

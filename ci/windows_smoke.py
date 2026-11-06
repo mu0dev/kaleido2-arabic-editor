@@ -12,7 +12,8 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-from app import _patch_kaleido_binary_io  # noqa: E402
+from app import Project, _patch_kaleido_binary_io  # noqa: E402
+from engine.tests.test_engine import tiny_fnt6  # noqa: E402
 
 
 def run(args: list[str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
@@ -47,7 +48,7 @@ def check_tools(tools_dir: Path) -> None:
     print("sdu.exe and EnterExtractor.exe launch successfully")
 
 
-def check_ruby_compiler(source_dir: Path, ruby: str) -> None:
+def check_ruby_compiler(source_dir: Path, ruby: str, sdu: Path | None) -> None:
     run([ruby, "--version"])
     patch_source = source_dir / "kaleido2-patch"
     kaleido_source = source_dir / "kaleido"
@@ -67,6 +68,9 @@ def check_ruby_compiler(source_dir: Path, ruby: str) -> None:
         rom_source = root / "synthetic-rom-source"
         rom_source.mkdir()
         (rom_source / "main.snr").write_bytes(b"replaced by compiler")
+        original_font = tiny_fnt6()
+        (rom_source / "newrodin-medium.fnt").write_bytes(original_font)
+        (rom_source / "system.fnt").write_bytes(original_font)
         marker = b"binary\r\n\x1a still present\r\n"
         (rom_source / "sample.bin").write_bytes(marker)
         output = root / "synthetic.rom"
@@ -86,6 +90,13 @@ def check_ruby_compiler(source_dir: Path, ruby: str) -> None:
         if not payload.startswith(b"ROM2") or b"SNR " not in payload or marker not in payload:
             raise RuntimeError("Ruby did not compile the scenario and preserve binary ROM asset bytes")
         print(f"Ruby compiled a synthetic {len(payload):,}-byte ROM2 with intact binary payload")
+        if sdu is not None:
+            project = Project.__new__(Project)
+            project.config = {"data_rom": str(output), "sdu_bin": str(sdu)}
+            story, system = project.original_font_paths(root / "extracted-fonts")
+            if story.read_bytes() != original_font or system.read_bytes() != original_font:
+                raise RuntimeError("Original fonts extracted from the ROM did not match their sources")
+            print("Both original FNT6 fonts extracted from the synthetic ROM2")
 
 
 def main() -> None:
@@ -93,11 +104,13 @@ def main() -> None:
     parser.add_argument("--tools-dir", type=Path, default=REPO / "tools")
     parser.add_argument("--source-dir", type=Path, default=REPO / "dependencies")
     parser.add_argument("--ruby", default="ruby")
+    parser.add_argument("--sdu", type=Path, help="archive tool for the ROM font extraction check")
     parser.add_argument("--skip-tool-check", action="store_true", help="for local non-Windows verification")
     args = parser.parse_args()
     if not args.skip_tool_check:
         check_tools(args.tools_dir)
-    check_ruby_compiler(args.source_dir, args.ruby)
+    sdu = args.sdu or (args.tools_dir / "sdu.exe" if not args.skip_tool_check else None)
+    check_ruby_compiler(args.source_dir, args.ruby, sdu)
 
 
 if __name__ == "__main__":

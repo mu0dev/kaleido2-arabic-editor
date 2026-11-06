@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 import tempfile
 import threading
 import unittest
@@ -17,6 +18,21 @@ from engine.fnt6 import DEFAULT_ARABIC_FONT
 
 
 class EditorStartupTests(unittest.TestCase):
+    def test_build_reports_missing_rom_as_a_config_problem(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            project = Project.__new__(Project)
+            project.config_path = root / "config.local.json"
+            project.lock = threading.RLock()
+            project.config = {
+                "original_dialogue": str(root / "dialogue.txt"),
+                "original_script": str(root / "main.rb"),
+                "data_rom": str(root / "missing-data.rom"),
+                "ruby_bin": sys.executable,
+            }
+            with self.assertRaisesRegex(ValueError, r"data_rom: .*missing-data\.rom"):
+                project.export()
+
     def test_editor_serves_project_status(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -28,7 +44,16 @@ class EditorStartupTests(unittest.TestCase):
                 "data_rom": ("data.rom", "synthetic archive fixture"),
             }
             config: dict[str, str] = {"project_dir": str(root / "project"),
-                                      "arabic_font_path": str(DEFAULT_ARABIC_FONT)}
+                                      "arabic_font_path": str(DEFAULT_ARABIC_FONT),
+                                      "ruby_bin": sys.executable}
+            patch_source = root / "patch-source"
+            patch_source.mkdir()
+            (patch_source / "compile.rb").write_text("", encoding="utf-8")
+            kaleido = root / "kaleido"
+            (kaleido / "rom-repack").mkdir(parents=True)
+            (kaleido / "rom-repack" / "kal_tl.rb").write_text("", encoding="utf-8")
+            config["patch_source"] = str(patch_source)
+            config["kaleido_path"] = str(kaleido)
             for key, (name, content) in source_files.items():
                 path = root / name
                 path.write_text(content, encoding="utf-8")

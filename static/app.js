@@ -5,6 +5,7 @@ const number = new Intl.NumberFormat();
 const state = {
   tab: "dialogue",
   status: null,
+  lastBuildMissing: null,
   names: new Map(),
   dialogue: { items: [], total: 0, offset: 0, limit: 50, q: "", filter: "all", selected: null, draft: "", drafts: new Map(), request: 0 },
   strings: { items: [], filtered: [], selected: null, draft: "", drafts: new Map(), loaded: false },
@@ -125,11 +126,61 @@ function renderCoverage(status) {
   }
 }
 
+const gameFileLabels = {
+  data_rom: "Game ROM",
+  original_story_font: "Story font",
+  original_system_font: "System font",
+  original_dialogue: "Original dialogue",
+  original_script: "Original script",
+  arabic_font_path: "Arabic font",
+  patch_source: "Patch compiler source",
+  kaleido_path: "Kaleido compiler source",
+  sdu_bin: "Archive tool",
+  ruby_bin: "Ruby",
+};
+
+function missingFileFromError(error) {
+  const message = error instanceof Error ? error.message : String(error);
+  const match = message.match(/(?:No such file or directory|File not found):\s*['"]([^'"]+)['"]/i);
+  if (!match) return null;
+  const path = match[1];
+  const filename = path.split(/[\\/]/).pop()?.toLowerCase();
+  const key = { "newrodin-medium.fnt": "original_story_font", "system.fnt": "original_system_font", "data.rom": "data_rom" }[filename];
+  return key ? { key, path } : null;
+}
+
+function renderSetupNotice() {
+  const notice = $("setup-notice");
+  const reported = Array.isArray(state.status?.missing_files) ? state.status.missing_files : [];
+  const missing = reported.filter(item => item && typeof item.key === "string" && typeof item.path === "string");
+  if (state.lastBuildMissing && !missing.some(item => item.key === state.lastBuildMissing.key && item.path === state.lastBuildMissing.path)) {
+    missing.unshift(state.lastBuildMissing);
+  }
+  notice.hidden = state.status?.ready !== false && missing.length === 0;
+  if (notice.hidden) return;
+  $("setup-notice-title").textContent = state.lastBuildMissing ? "Build stopped: missing input" : "Build setup needs attention";
+  $("setup-notice-detail").textContent = missing.length
+    ? "The editor could not find these required inputs:"
+    : "One or more required inputs are unavailable.";
+  const list = $("missing-files-list");
+  list.replaceChildren();
+  list.hidden = missing.length === 0;
+  for (const item of missing) {
+    const row = node("li");
+    row.append(node("strong", "", gameFileLabels[item.key] || "Required file"));
+    row.append(" · ", node("code", "", item.key));
+    row.append(node("code", "missing-path", item.path));
+    list.append(row);
+  }
+}
+
 async function refreshStatus() {
   try {
     const status = await api("/api/status");
     state.status = status;
+    if (status.ready) state.lastBuildMissing = null;
     renderCoverage(status);
+    renderSetupNotice();
     $("connection-state").textContent = status.ready === false ? "Project setup needed" : "Local workspace ready";
     document.querySelector(".live-dot").className = "live-dot connected";
   } catch (error) {
@@ -728,10 +779,18 @@ async function exportPatch() {
   logAction("Building patch…");
   try {
     const result = await postJSON("/api/export", {});
+    state.lastBuildMissing = null;
+    renderSetupNotice();
     logAction(result.message || `Build complete${result.path ? `: ${result.path}` : ""}`);
     toast("Patch built");
     refreshStatus();
-  } catch (error) { logAction(`Build failed: ${error.message}`); showError(error, "Build failed"); }
+  } catch (error) {
+    state.lastBuildMissing = missingFileFromError(error);
+    renderSetupNotice();
+    logAction(`Build failed: ${error.message}`);
+    showError(error, "Build failed");
+    refreshStatus();
+  }
   finally { busy(button, false); }
 }
 

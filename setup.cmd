@@ -81,8 +81,8 @@ if not exist "config.local.json" (
     echo ERROR: Could not create config.local.json. 1>&2
     exit /b 1
   )
-  echo Created config.local.json. Edit its game file paths before using run.cmd.
+  echo Created config.local.json. Set its data_rom path before using run.cmd.
 )
 
-echo Setup complete. The .venv folder is ready. Edit config.local.json, then run run.cmd.
+echo Setup complete. The .venv folder is ready. Set data_rom in config.local.json, then run run.cmd.
 exit /b 0
