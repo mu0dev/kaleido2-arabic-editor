@@ -22,7 +22,7 @@ jobs:
           ruby-version: '3.2'
       - name: Set up Windows editor through its batch launcher
         shell: cmd
-        run: call setup.cmd
+        run: call setup.cmd --no-pause
         timeout-minutes: 12
       - name: Verify bootstrap can be rerun safely
         shell: cmd
