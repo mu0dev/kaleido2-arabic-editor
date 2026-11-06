@@ -69,6 +69,26 @@ def _png_dimensions(data: bytes) -> tuple[int, int]:
     return struct.unpack(">II", data[16:24])
 
 
+def _patch_kaleido_binary_io(kaleido_copy: Path) -> None:
+    """Keep the copied Ruby repacker from translating binary bytes on Windows.
+
+    Kaleido's original text-mode reads can change CRLF and treat 0x1A as EOF
+    when it packs FNT6, PIC, TXA, or MP4 files. Never alter the user's checkout.
+    """
+    replacements = (
+        ("rom-repack/toolkit.rb", "File.read(entry_path)", "File.binread(entry_path)"),
+        ("rom-repack/scenario.rb", "File.write(file, data)", "File.binwrite(file, data)"),
+    )
+    for relative, old, new in replacements:
+        path = kaleido_copy / relative
+        source = path.read_text(encoding="utf-8")
+        if new in source:
+            continue
+        if source.count(old) != 1:
+            raise RuntimeError(f"Unsupported Kaleido checkout: expected {old} in {path}")
+        path.write_text(source.replace(old, new), encoding="utf-8")
+
+
 class Project:
     def __init__(self, config_path: Path):
         self.config_path = config_path.resolve()
@@ -287,7 +307,7 @@ class Project:
             process = subprocess.run(
                 [self.config["sdu_bin"], "rom", "extract-one", self.config["data_rom"],
                  f"/movie/{name}.mp4", str(original)],
-                capture_output=True, text=True, timeout=120,
+                capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=120,
             )
             if process.returncode or not original.is_file():
                 raise RuntimeError("Could not extract original game video: " + process.stderr[-300:])
@@ -328,10 +348,12 @@ class Project:
             shutil.copytree(source, patch, ignore=shutil.ignore_patterns(".git", "__pycache__"))
             # Copying this small compiler checkout avoids Windows symlink
             # privileges and keeps each build independent of later edits.
+            kaleido_copy = workspace / "kaleido"
             shutil.copytree(
-                Path(self.config["kaleido_path"]).resolve(), workspace / "kaleido",
+                Path(self.config["kaleido_path"]).resolve(), kaleido_copy,
                 ignore=shutil.ignore_patterns(".git", "__pycache__"),
             )
+            _patch_kaleido_binary_io(kaleido_copy)
             (workspace / "output").mkdir(parents=True)
             edits_path = workspace / "edited-dialogue.txt"
             edits_path.write_text(self._edited_dialogue(), encoding="utf-8")
@@ -372,7 +394,8 @@ class Project:
             patch_output = workspace / "output" / "patch.rom"
             process = subprocess.run(
                 [self.config["ruby_bin"], "compile.rb", str(patch_output), "skip-images"],
-                cwd=patch, env=env, capture_output=True, text=True, timeout=600,
+                cwd=patch, env=env, capture_output=True, text=True,
+                encoding="utf-8", errors="replace", timeout=600,
             )
             log = (process.stdout + "\n" + process.stderr)[-12000:]
             (build_root / "build.log").write_text(log, encoding="utf-8")

@@ -40,7 +40,9 @@ def _binary(path: str | Path) -> str:
 
 def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
     try:
-        process = subprocess.run(args, capture_output=True, text=True, check=False)
+        process = subprocess.run(
+            args, capture_output=True, text=True, encoding="utf-8", errors="replace", check=False
+        )
     except OSError as exc:
         raise ImagePipelineError(f"Could not run {args[0]}: {exc}") from exc
     if process.returncode:

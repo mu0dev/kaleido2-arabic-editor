@@ -1,2 +1,4 @@
 Pillow>=10
 fonttools>=4
+arabic-reshaper>=3
+python-bidi>=0.6

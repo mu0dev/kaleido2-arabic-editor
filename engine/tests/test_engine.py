@@ -9,7 +9,8 @@ from unittest.mock import patch
 
 from engine import TranslationError, export_patch, prepare_runtime
 from engine import runtime
-from engine.fnt6 import advance_width, mapped_codepoints
+from engine.fnt6 import DEFAULT_ARABIC_FONT, advance_width, mapped_codepoints, render_word
+from engine.shaping import ArabicFont
 
 
 def tiny_fnt6(line_height: int = 80) -> bytes:
@@ -31,6 +32,21 @@ def tiny_fnt6(line_height: int = 80) -> bytes:
 
 
 class TranslatorEngineTests(unittest.TestCase):
+    def test_arabic_rendering_without_libraqm(self) -> None:
+        with patch("engine.shaping.features.check", return_value=False):
+            font = ArabicFont(DEFAULT_ARABIC_FONT, 96)
+            display, options = font._layout("مرحبا")
+            self.assertEqual(options, {})
+            self.assertTrue(any(0xFB50 <= ord(char) <= 0xFEFC for char in display))
+            glyph = render_word("مرحبا", font, 20, 4)
+            self.assertIsNotNone(glyph["preview"].getbbox())
+            self.assertGreater(glyph["advance_16"], 0)
+            prepared = prepare_runtime(
+                "00007\t@r仮文甲。\n", "00007\t@rمرحبا بالعالم.\n",
+                tiny_fnt6(), tiny_fnt6(), arabic_font_path=DEFAULT_ARABIC_FONT,
+            )
+            self.assertNotRegex(prepared.dialogue, runtime.ARABIC)
+
     def test_export_merges_edits_and_builds_both_fonts(self) -> None:
         original = "# dialogue\n00007\t話者甲@r@vtest00010.仮文甲。\n00008\t話者乙@r@vtest10010.仮文乙。\n"
         edited = "00007\tالمتحدث@r@vtest00010.هذه جملة عربية قصيرة للاختبار.\n"

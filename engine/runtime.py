@@ -8,9 +8,8 @@ import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from PIL import ImageFont, features
-
 from .fnt6 import DEFAULT_ARABIC_FONT, advance_width
+from .shaping import ArabicFont
 
 
 ARABIC = re.compile(r"[\u0600-\u06ff\u0750-\u077f\u08a0-\u08ff]")
@@ -160,13 +159,11 @@ class RuntimeConverter:
     translated_speakers: set[str] = field(default_factory=set)
 
     def __post_init__(self) -> None:
-        if not features.check("raqm"):
-            raise TranslationError("Pillow needs libraqm for Arabic shaping")
         line_height = int.from_bytes(self.original_story_font[24:26], "little") + int.from_bytes(
             self.original_story_font[26:28], "little"
         )
         size = round(96 * line_height / 80)
-        self.font = ImageFont.truetype(str(self.registry.font_path), size, layout_engine=ImageFont.Layout.RAQM)
+        self.font = ArabicFont(self.registry.font_path, size)
         self.space_width = advance_width(self.original_story_font, ord(" "))
 
     def _convert_text_run(self, text: str, line_id: str, scale: float) -> str:
@@ -182,7 +179,7 @@ class RuntimeConverter:
         for token in tokens:
             # Even punctuation-only tokens are baked so their display order is
             # controlled by the same registry as Arabic words.
-            token_width = self.font.getlength(token, direction="rtl")
+            token_width = self.font.getlength(token)
             if token_width > limit:
                 raise TranslationError(
                     f"ID {line_id}: {token!r} is wider than one display row; split it"

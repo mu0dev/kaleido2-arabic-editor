@@ -10,11 +10,7 @@ Clone this repository, install the dependencies below, then copy `config.example
 
 Use your own extracted copy of the game. You need `data.rom`, `newrodin-medium.fnt`, and `system.fnt`, plus local checkouts of the [`kaleido2-patch`](https://gitlab.com/Neurochitin/kaleido2-patch) repository and the [`kaleido`](https://gitlab.com/Neurochitin/kaleido) repository on its `kaleido2-repack` branch. The patch checkout supplies `dialogue.txt` and `base/main.rb`. The game files and translated project stay outside this tool's source bundle.
 
-Install Python 3.10+ with Pillow **including libraqm** (needed to shape Arabic) and fontTools, a Noto Sans Arabic Regular TTF, Ruby compatible with the patch compiler, [`sdu`](https://github.com/AuroraWright/shin), and [`EnterExtractor`](https://github.com/DCNick3/EnterExtractor). `sdu` reads game archive entries; `EnterExtractor` converts image assets. Suyu is needed to run the result. Install the Python dependencies with `python3 -m pip install -r requirements.txt` on Linux, or use the Windows commands below. Check Pillow shaping with:
-
-```bash
-python3 -c 'from PIL import features; print("libraqm:", features.check("raqm"))'
-```
+Install Python 3.10+ with the packages in `requirements.txt`, a Noto Sans Arabic Regular TTF, Ruby compatible with the patch compiler, [`sdu`](https://github.com/AuroraWright/shin), and [`EnterExtractor`](https://github.com/DCNick3/EnterExtractor). `sdu` reads game archive entries; `EnterExtractor` converts image assets. Suyu is needed to run the result. Pillow uses libraqm for Arabic shaping where available; the included reshaping and bidirectional text packages provide a Windows fallback. Install the Python dependencies with `python3 -m pip install -r requirements.txt` on Linux, or use the Windows commands below.
 
 Copy `config.example.json` to `config.local.json`. Edit every path for your machine. `project_dir` should be a writable directory for translations, extracted previews, and builds. `suyu_load_dir` is Suyu's `load` directory; its location can vary with your install. `original_*` and `data_rom` point to your local source files. `arabic_font_path` points to the Noto Sans Arabic Regular TTF. `patch_source`, `kaleido_path`, `sdu_bin`, `enter_extractor_bin`, and `ruby_bin` point to tools or checkouts on your machine. If Ruby is in a custom runtime, optional `ruby_lib_dir` and `ruby_load_paths` can be set as well.
 
@@ -30,11 +26,10 @@ Install Python 3.10+, Ruby, and Windows builds of `sdu` and `EnterExtractor`. In
 py -3 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 copy config.example.json config.local.json
-.venv\Scripts\python.exe -c "from PIL import features; print('libraqm:', features.check('raqm'))"
 run.cmd
 ```
 
-The `libraqm` check must print `True` for Arabic patch builds. Edit `config.local.json` before running `run.cmd`: use absolute paths with forward slashes, such as `C:/Games/Kaleido/data.rom`, which are valid in JSON. Set `arabic_font_path` to your Noto Sans Arabic Regular TTF, `ruby_bin` to `ruby.exe`, `sdu_bin` and `enter_extractor_bin` to their Windows executables, and `suyu_load_dir` to the actual Suyu `load` directory on your installation. Point `patch_source` and `kaleido_path` to the required local checkouts. Run `run.cmd 8780` to choose another local port. The server binds to localhost by default.
+Edit `config.local.json` before running `run.cmd`: use absolute paths with forward slashes, such as `C:/Games/Kaleido/data.rom`, which are valid in JSON. Set `arabic_font_path` to your Noto Sans Arabic Regular TTF, `ruby_bin` to `ruby.exe`, `sdu_bin` and `enter_extractor_bin` to their Windows executables, and `suyu_load_dir` to the actual Suyu `load` directory on your installation. Point `patch_source` and `kaleido_path` to the required local checkouts. Close the game before installing a patch so Suyu does not lock the old file. Run `run.cmd 8780` to choose another local port. The server binds to localhost by default.
 
 ## Translate and build
 

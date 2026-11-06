@@ -11,7 +11,9 @@ import os
 import struct
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont, features
+from PIL import Image, ImageDraw
+
+from .shaping import ArabicFont
 
 
 DEFAULT_ARABIC_FONT = Path(
@@ -107,9 +109,9 @@ def delta_encode(pixels: list[int], width: int) -> bytes:
     return bytes(result)
 
 
-def render_word(word: str, font: ImageFont.FreeTypeFont, spread: int, mip_count: int):
-    bbox = font.getbbox(word, direction="rtl", anchor="ls")
-    advance = font.getlength(word, direction="rtl")
+def render_word(word: str, font: ArabicFont, spread: int, mip_count: int):
+    bbox = font.getbbox(word)
+    advance = font.getlength(word)
     if round(advance * 16) > 0xFFFF:
         raise ValueError(f"Token is too wide for FNT6 advance field: {word!r}")
     margin = 10
@@ -117,7 +119,7 @@ def render_word(word: str, font: ImageFont.FreeTypeFont, spread: int, mip_count:
     height = round_up(bbox[3] - bbox[1] + margin * 2, 1 << (mip_count - 1))
     baseline = margin - bbox[1]
     image = Image.new("L", (width, height), 0)
-    ImageDraw.Draw(image).text((margin - bbox[0], baseline), word, font=font, fill=255, direction="rtl", anchor="ls")
+    font.draw(ImageDraw.Draw(image), (margin - bbox[0], baseline), word)
     field = signed_distance(image)
     mip_data = bytearray()
     current_width, current_height = width, height
@@ -251,13 +253,11 @@ def build_font(
     arabic_font_path: Path = DEFAULT_ARABIC_FONT,
 ) -> bytes:
     """Build a patched font from explicit (codepoint, shaped-token) pairs."""
-    if not features.check("raqm"):
-        raise RuntimeError("Pillow must be built with libraqm for Arabic shaping")
     spread = u16(reference, 20)
     line_height = u16(reference, 24) + u16(reference, 26)
     if not 1 <= spread <= 128 or not 1 <= line_height <= 256:
         raise ValueError("Unexpected FNT6 font metrics")
     font_size = round(96 * line_height / 80)
-    font = ImageFont.truetype(str(arabic_font_path), font_size, layout_engine=ImageFont.Layout.RAQM)
+    font = ArabicFont(arabic_font_path, font_size)
     glyphs = [(cp, render_word(token, font, spread, 4)) for cp, token in glyph_tokens]
     return append_glyphs(reference, glyphs)

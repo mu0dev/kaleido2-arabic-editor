@@ -29,8 +29,6 @@ jobs:
         run: >-
           python -c "import os, urllib.request;
           urllib.request.urlretrieve('https://raw.githubusercontent.com/google/fonts/e5ee31305efa101c2cae65f44d9642df2c8f0b4d/ofl/notosansarabic/NotoSansArabic%5Bwdth%2Cwght%5D.ttf', os.environ['KALEIDO_ARABIC_FONT'])"
-      - name: Check Arabic shaping support
-        run: python -c "from PIL import features; assert features.check('raqm'), 'Pillow needs libraqm for Arabic shaping'"
       - name: Compile Python sources
         run: python -m compileall -q app.py engine
       - name: Run asset-free engine tests
