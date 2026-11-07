@@ -100,7 +100,9 @@ class WordRegistry:
     occupied: set[int]
     font_path: Path = DEFAULT_ARABIC_FONT
     tokens: list[tuple[int, str]] = field(default_factory=list)
-    codepoints_by_token: dict[str, int] = field(default_factory=dict)
+    codepoints_by_token: dict[tuple[str, int], int] = field(default_factory=dict)
+    offsets: dict[int, int] = field(default_factory=dict)
+    story_line_height: int | None = None
 
     def __post_init__(self) -> None:
         self.supported = font_charset(self.font_path)
@@ -110,11 +112,12 @@ class WordRegistry:
             if cp not in self.occupied
         )
 
-    def register(self, token: str) -> str:
+    def register(self, token: str, offset_x: int = 0) -> str:
         if not token:
             raise TranslationError("Cannot encode an empty Arabic token")
-        if token in self.codepoints_by_token:
-            return chr(self.codepoints_by_token[token])
+        key = (token, offset_x)
+        if key in self.codepoints_by_token:
+            return chr(self.codepoints_by_token[key])
         missing = sorted({character for character in token if ord(character) not in self.supported})
         if missing:
             labels = ", ".join(f"{character!r} U+{ord(character):04X}" for character in missing)
@@ -123,8 +126,10 @@ class WordRegistry:
             codepoint = next(self._pool)
         except StopIteration as error:
             raise TranslationError("No unused Unicode codepoints remain for Arabic tokens") from error
-        self.codepoints_by_token[token] = codepoint
+        self.codepoints_by_token[key] = codepoint
         self.tokens.append((codepoint, token))
+        if offset_x:
+            self.offsets[codepoint] = offset_x
         return chr(codepoint)
 
 
@@ -142,39 +147,107 @@ class RuntimeConverter:
             self.original_story_font[26:28], "little"
         )
         size = round(96 * line_height / 80)
+        self.registry.story_line_height = line_height
         self.font = ArabicFont(self.registry.font_path, size)
         self.space_width = advance_width(self.original_story_font, ord(" "))
 
-    def _convert_text_run(self, text: str, line_id: str, scale: float) -> str:
-        if not ARABIC.search(text):
-            return text
-        tokens = text.split()
-        if not tokens:
-            return text
-        rows: list[list[str]] = []
-        current: list[str] = []
-        width = 0.0
-        limit = self.max_width / scale
-        for token in tokens:
-            # Even punctuation-only tokens are baked so their display order is
-            # controlled by the same registry as Arabic words.
-            token_width = self.font.getlength(token)
-            if token_width > limit:
+    def _convert_content(self, content: str, line_id: str) -> str:
+        """Place words right-to-left while retaining left-to-right pen advances.
+
+        The game reveals characters in script order. Each Arabic word is one
+        pre-shaped glyph, so script order follows Arabic reading order; a
+        per-occurrence signed glyph bearing moves it to its visual position.
+        Keeping ordinary positive advances preserves the native reveal timing.
+        """
+        # Each row contains (kind, value, scale, width) events. Commands stay at
+        # their source position, including those between two words on one row.
+        rows: list[list[tuple[str, str, float, float]]] = [[]]
+        row_width = 0.0
+        has_word = False
+        pending_space = False
+        scale = 1.0
+
+        def trim_pending_space() -> None:
+            nonlocal row_width, pending_space
+            if pending_space:
+                for index in range(len(rows[-1]) - 1, -1, -1):
+                    if rows[-1][index][0] == "space":
+                        row_width -= rows[-1][index][3]
+                        del rows[-1][index]
+                        break
+            pending_space = False
+
+        for tag, raw in control_stream(content, line_id):
+            if tag in RUBY_TAGS:
                 raise TranslationError(
-                    f"ID {line_id}: {token!r} is wider than one display row; split it"
+                    f"ID {line_id}: flatten ruby tags @b/@</@> before exporting Arabic text"
                 )
-            if current and width + self.space_width + token_width > limit:
-                rows.append(current)
-                current = []
-                width = 0.0
-            width += (self.space_width if current else 0.0) + token_width
-            current.append(token)
-        rows.append(current)
-        self.inserted_breaks += len(rows) - 1
-        return "@r".join(
-            " ".join(self.registry.register(token) for token in reversed(row))
-            for row in rows
-        )
+            if tag == "r":
+                trim_pending_space()
+                rows.append([])
+                row_width = 0.0
+                has_word = False
+                continue
+            if tag != "text":
+                rows[-1].append(("tag", raw, scale, 0.0))
+                if tag == "z":
+                    scale = max(0.01, min(2.0, int(raw[2:-1]) / 100))
+                continue
+            if not ARABIC.search(raw) and any(
+                not character.isspace() and ord(character) not in self.registry.supported
+                for character in raw
+            ):
+                raise TranslationError(
+                    f"ID {line_id}: untranslated text remains on an Arabic line; "
+                    "translate the whole line before exporting"
+                )
+            for part in re.findall(r"\s+|\S+", raw):
+                if part.isspace():
+                    if has_word and not pending_space:
+                        gap = self.space_width * scale
+                        rows[-1].append(("space", " ", scale, gap))
+                        row_width += gap
+                        pending_space = True
+                    continue
+                # Font advances are stored in sixteenth-pixel units in FNT6.
+                word_width = round(self.font.getlength(part) * 16) / 16 * scale
+                if word_width > self.max_width:
+                    raise TranslationError(
+                        f"ID {line_id}: {part!r} is wider than one display row; split it"
+                    )
+                if has_word and row_width + word_width > self.max_width:
+                    trim_pending_space()
+                    rows.append([])
+                    row_width = 0.0
+                    has_word = False
+                    self.inserted_breaks += 1
+                rows[-1].append(("word", part, scale, word_width))
+                row_width += word_width
+                has_word = True
+                pending_space = False
+
+        trim_pending_space()
+        output_rows = []
+        for row in rows:
+            # Mirror within the row's own advance width. The native renderer
+            # can center or right-align that row; using max_width here would
+            # move short rows outside its measured bounds.
+            row_extent = sum(width for _, _, _, width in row)
+            pen_x = 0.0
+            rendered = []
+            for kind, value, word_scale, width in row:
+                if kind == "word":
+                    desired_x = row_extent - pen_x - width
+                    shift = round((desired_x - pen_x) / word_scale)
+                    rendered.append(self.registry.register(value, shift))
+                    pen_x += width
+                elif kind == "space":
+                    rendered.append(value)
+                    pen_x += width
+                else:
+                    rendered.append(value)
+            output_rows.append("".join(rendered))
+        return "@r".join(output_rows)
 
     def convert_line(self, line_id: str, value: str) -> str:
         if not ARABIC.search(value):
@@ -192,18 +265,8 @@ class RuntimeConverter:
         if not ARABIC.search(content):
             self.converted_lines += 1
             return speaker + "@r" + content
-        scale = 1.0
-        output_parts: list[str] = []
-        for tag, raw in control_stream(content, line_id):
-            if tag in RUBY_TAGS:
-                raise TranslationError(
-                    f"ID {line_id}: flatten ruby tags @b/@</@> before exporting Arabic text"
-                )
-            if tag == "z":
-                scale = max(0.01, min(2.0, int(raw[2:-1]) / 100))
-            output_parts.append(self._convert_text_run(raw, line_id, scale) if tag == "text" else raw)
         self.converted_lines += 1
-        return speaker + "@r" + "".join(output_parts)
+        return speaker + "@r" + self._convert_content(content, line_id)
 
     def convert_ui_text(self, text: str) -> str:
         """Encode a UI string for a caller that can patch its game location."""

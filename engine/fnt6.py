@@ -250,13 +250,32 @@ def build_font(
     reference: bytes,
     glyph_tokens: list[tuple[int, str]],
     arabic_font_path: Path = DEFAULT_ARABIC_FONT,
+    *,
+    offsets: dict[int, int] | None = None,
+    source_line_height: int | None = None,
 ) -> bytes:
-    """Build a patched font from explicit (codepoint, shaped-token) pairs."""
+    """Build a patched font from explicit (codepoint, shaped-token) pairs.
+
+    ``offsets`` shifts a glyph's signed X bearing without changing its positive
+    advance. Offsets are measured in source-font pixels, so they are scaled for
+    the system font when it has different metrics from the story font.
+    """
     spread = u16(reference, 20)
     line_height = u16(reference, 24) + u16(reference, 26)
     if not 1 <= spread <= 128 or not 1 <= line_height <= 256:
         raise ValueError("Unexpected FNT6 font metrics")
     font_size = round(96 * line_height / 80)
     font = ArabicFont(arabic_font_path, font_size)
-    glyphs = [(cp, render_word(token, font, spread, 4)) for cp, token in glyph_tokens]
+    source_size = round(96 * (source_line_height or line_height) / 80)
+    position_offsets = offsets or {}
+    glyphs = []
+    for codepoint, token in glyph_tokens:
+        glyph = render_word(token, font, spread, 4)
+        shift = round(position_offsets.get(codepoint, 0) * font_size / source_size)
+        glyph["bearing_x"] += shift
+        if not -32768 <= glyph["bearing_x"] <= 32767:
+            raise ValueError(
+                f"Positioned Arabic glyph U+{codepoint:04X} exceeds the FNT6 X bearing range"
+            )
+        glyphs.append((codepoint, glyph))
     return append_glyphs(reference, glyphs)

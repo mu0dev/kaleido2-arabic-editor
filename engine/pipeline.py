@@ -88,7 +88,7 @@ def prepare_runtime(
         "tokens_outside_bmp_private_use": outside_pua,
         "ui_strings_prepared": len(converted_ui),
         "ui_strings_need_game_specific_injection": bool(converted_ui),
-        "typewriter_note": "Arabic appears one baked word at a time in left-to-right reveal order; completed rows read right-to-left.",
+        "typewriter_note": "Arabic words are placed for right-to-left reveal with positive advances; confirm the animation in game.",
     }
     return PreparedRuntime(runtime, converted_ui, registry, report)
 
@@ -135,8 +135,16 @@ def export_patch(
     )
     # Render both fonts before touching the output directory, so a bad token
     # or FNT6 capacity error cannot leave a half-built export behind.
-    patched_story_font = build_font(story_font, prepared.registry.tokens, Path(arabic_font_path))
-    patched_system_font = build_font(system_font, prepared.registry.tokens, Path(arabic_font_path))
+    patched_story_font = build_font(
+        story_font, prepared.registry.tokens, Path(arabic_font_path),
+        offsets=prepared.registry.offsets,
+        source_line_height=prepared.registry.story_line_height,
+    )
+    patched_system_font = build_font(
+        system_font, prepared.registry.tokens, Path(arabic_font_path),
+        offsets=prepared.registry.offsets,
+        source_line_height=prepared.registry.story_line_height,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     dialogue_path = output_dir / "dialogue.txt"
     story_path = output_dir / "newrodin-medium.fnt"
@@ -149,7 +157,13 @@ def export_patch(
     system_path.write_bytes(patched_system_font)
     mapping_path.write_text(
         json.dumps(
-            [{"codepoint": f"U+{cp:04X}", "text": token} for cp, token in prepared.registry.tokens],
+            [
+                {
+                    "codepoint": f"U+{cp:04X}", "text": token,
+                    "offset_x": prepared.registry.offsets.get(cp, 0),
+                }
+                for cp, token in prepared.registry.tokens
+            ],
             ensure_ascii=False,
             indent=2,
         ) + "\n",

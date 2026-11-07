@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 from engine import TranslationError, export_patch, prepare_runtime
 from engine import runtime
-from engine.fnt6 import DEFAULT_ARABIC_FONT, advance_width, mapped_codepoints, render_word
+from engine.fnt6 import DEFAULT_ARABIC_FONT, advance_width, build_font, mapped_codepoints, render_word
 from engine.shaping import ArabicFont
 
 
@@ -32,6 +32,111 @@ def tiny_fnt6(line_height: int = 80) -> bytes:
 
 
 class TranslatorEngineTests(unittest.TestCase):
+    def test_arabic_words_reveal_from_right_with_positive_advances(self) -> None:
+        source = "00007\t@r仮文甲。\n"
+        edited = "00007\t@rمرحبا بالعالم الجميل\n"
+        font = tiny_fnt6()
+        prepared = prepare_runtime(source, edited, font, font, max_width=1000)
+        by_codepoint = dict(prepared.registry.tokens)
+        body = prepared.dialogue.split("@r", 1)[1].strip()
+        words = [character for character in body if ord(character) in by_codepoint]
+        self.assertEqual([by_codepoint[ord(character)] for character in words],
+                         ["مرحبا", "بالعالم", "الجميل"])
+        self.assertEqual(body.count(" "), 2)
+        arabic_font = ArabicFont(DEFAULT_ARABIC_FONT, 96)
+        pen = 0.0
+        left_edges = []
+        widths = []
+        for character in body:
+            if character == " ":
+                pen += advance_width(font, ord(" "))
+                continue
+            codepoint = ord(character)
+            width = round(arabic_font.getlength(by_codepoint[codepoint]) * 16) / 16
+            left_edges.append(pen + prepared.registry.offsets.get(codepoint, 0))
+            widths.append(width)
+            pen += width
+        self.assertGreater(left_edges[0], left_edges[1])
+        self.assertGreater(left_edges[1], left_edges[2])
+        self.assertAlmostEqual(left_edges[0] + widths[0], pen, delta=1)
+        self.assertLess(left_edges[1] + widths[1], left_edges[0])
+        self.assertAlmostEqual(left_edges[-1], 0, delta=1)
+        self.assertEqual(prepared.report["inserted_line_breaks"], 0)
+        patched = build_font(font, prepared.registry.tokens, offsets=prepared.registry.offsets,
+                             source_line_height=prepared.registry.story_line_height)
+        for character in words:
+            self.assertGreater(advance_width(patched, ord(character)), 0)
+
+    def test_rtl_positions_span_controls_and_reset_on_line_breaks(self) -> None:
+        source = "00007\t@r仮文甲。@k仮文乙。@z50.仮文丙。@r仮文丁。\n"
+        edited = "00007\t@rمرحبا@kعالم @z50.جميل@rمرحبا\n"
+        prepared = prepare_runtime(source, edited, tiny_fnt6(), tiny_fnt6(), max_width=1000)
+        body = prepared.dialogue.split("@r", 1)[1].strip()
+        self.assertIn("@k", body)
+        self.assertIn("@z50.", body)
+        self.assertEqual(body.count("@r"), 1)
+        self.assertEqual(prepared.report["inserted_line_breaks"], 0)
+        by_codepoint = dict(prepared.registry.tokens)
+        font = ArabicFont(DEFAULT_ARABIC_FONT, 96)
+        rows: list[list[float]] = [[]]
+        pen = 0.0
+        scale = 1.0
+        for tag, raw in runtime.control_stream(body, "00007"):
+            if tag == "r":
+                rows.append([])
+                pen = 0.0
+            elif tag == "z":
+                scale = 0.5
+            elif tag == "text":
+                for character in raw:
+                    if character == " ":
+                        pen += advance_width(tiny_fnt6(), ord(" ")) * scale
+                    else:
+                        codepoint = ord(character)
+                        rows[-1].append(pen + prepared.registry.offsets.get(codepoint, 0) * scale)
+                        pen += round(font.getlength(by_codepoint[codepoint]) * 16) / 16 * scale
+        self.assertEqual([len(row) for row in rows], [3, 1])
+        self.assertGreater(rows[0][0], rows[0][1])
+        self.assertGreater(rows[0][1], rows[0][2])
+        self.assertAlmostEqual(rows[1][0], 0, delta=1)
+
+    def test_mixed_untranslated_run_has_actionable_error(self) -> None:
+        source = "00007\t@r仮文甲。@k日本語\n"
+        edited = "00007\t@rمرحبا@k日本語\n"
+        with self.assertRaisesRegex(TranslationError, "translate the whole line"):
+            prepare_runtime(source, edited, tiny_fnt6(), tiny_fnt6())
+
+    def test_automatic_wrap_after_control_keeps_reveal_rows_in_bounds(self) -> None:
+        source = "00007\t@r仮文甲。@k仮文乙。\n"
+        edited = "00007\t@rمرحبا @kبالعالم\n"
+        font = ArabicFont(DEFAULT_ARABIC_FONT, 96)
+        limit = max(font.getlength("مرحبا"), font.getlength("بالعالم")) + 5
+        prepared = prepare_runtime(source, edited, tiny_fnt6(), tiny_fnt6(), max_width=limit)
+        body = prepared.dialogue.split("@r", 1)[1].strip()
+        self.assertEqual(body.count("@r"), 1)
+        self.assertIn("@k@r", body)
+        self.assertEqual(prepared.report["inserted_line_breaks"], 1)
+        by_codepoint = dict(prepared.registry.tokens)
+        self.assertEqual(
+            [by_codepoint[ord(character)] for character in body if ord(character) in by_codepoint],
+            ["مرحبا", "بالعالم"],
+        )
+        self.assertEqual(prepared.registry.offsets, {})
+
+    def test_positioned_glyph_offsets_scale_for_system_font_and_check_range(self) -> None:
+        story = tiny_fnt6(80)
+        system = tiny_fnt6(60)
+        codepoint = 0xE000
+        token = [(codepoint, "مرحبا")]
+        story_patched = build_font(story, token, offsets={codepoint: 120}, source_line_height=80)
+        system_patched = build_font(system, token, offsets={codepoint: 120}, source_line_height=80)
+        story_desc = 32 + 2 * 514 + 2 * 24
+        system_desc = 32 + 2 * 514 + 2 * 24
+        self.assertEqual(struct.unpack_from("<h", story_patched, story_desc)[0], 110)
+        self.assertEqual(struct.unpack_from("<h", system_patched, system_desc)[0], 80)
+        with self.assertRaisesRegex(ValueError, "bearing range"):
+            build_font(story, token, offsets={codepoint: 40000}, source_line_height=80)
+
     def test_arabic_rendering_without_libraqm(self) -> None:
         with patch("engine.shaping.features.check", return_value=False):
             font = ArabicFont(DEFAULT_ARABIC_FONT, 96)
